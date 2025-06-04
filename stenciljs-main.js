@@ -1,109 +1,68 @@
-import { newSpecPage } from '@stencil/core/testing';
-import { CommonTable } from './common-table';
 import { h } from '@stencil/core';
+import { TransactionDetails } from './transaction-details';
+import { newSpecPage } from '@stencil/core/testing';
 
-describe('common-table', () => {
-  const mockHeader = [
-    { field: 'id', label: 'ID', format: 'TEXT' },
-    { field: 'status', label: 'Status', format: 'STATUS' }
-  ];
+describe('TransactionDetails (JSX)', () => {
+  const mockTransaction = {
+    transactionAmount: 123.45,
+    transactionDateTime: '2025-06-04T15:00:00Z',
+    transactionStatus: 'SUCCESS',
+    transactionType: 'Credit',
+    cardInformation: {
+      cardLogo: 'visa',
+      cardLastFourDigits: '1234',
+    },
+    ticketNumber: 'REF123456'
+  };
 
-  const mockData = [
-    { id: '123', status: 'SUCCESS' },
-    { id: '456', status: 'FAILED' }
-  ];
-
-  it('renders with header and data', async () => {
+  it('renders transaction amount', async () => {
     const page = await newSpecPage({
-      components: [CommonTable],
-      template: () => (
-        <common-table
-          tableHeader={mockHeader}
-          tableData={mockData}
-          loading={false}
-        />
-      ),
+      components: [],
+      template: () => <div>{TransactionDetails(mockTransaction)}</div>,
     });
 
-    // Verify header
-    const headers = page.root.shadowRoot.querySelectorAll('thead th');
-    expect(headers.length).toBe(2);
-    expect(headers[0].textContent).toContain('ID');
-    expect(headers[1].textContent).toContain('Status');
-
-    // Verify row data
-    const rows = page.root.shadowRoot.querySelectorAll('tbody tr');
-    expect(rows.length).toBe(2);
-    expect(rows[0].textContent).toContain('123');
-    expect(rows[1].textContent).toContain('456');
+    expect(page.root.textContent).toContain('123.45');
+    expect(page.root.textContent).toContain('USD');
   });
 
-  it('emits pageRefresh on refresh button click', async () => {
+  it('renders formatted date and status', async () => {
     const page = await newSpecPage({
-      components: [CommonTable],
-      html: `<common-table></common-table>`,
+      components: [],
+      template: () => <div>{TransactionDetails(mockTransaction)}</div>,
     });
 
-    const refreshSpy = jest.fn();
-    page.root.addEventListener('pageRefresh', refreshSpy);
-
-    const button = page.root.shadowRoot.querySelector('button');
-    button?.click();
-
-    expect(refreshSpy).toHaveBeenCalled();
+    expect(page.root.textContent).toContain('Date & Time');
+    expect(page.root.textContent).toContain('SUCCESS');
   });
 
-  it('emits showDetails on row click', async () => {
+  it('renders card information and reference ID', async () => {
     const page = await newSpecPage({
-      components: [CommonTable],
-      template: () => (
-        <common-table
-          tableHeader={mockHeader}
-          tableData={mockData}
-        />
-      ),
+      components: [],
+      template: () => <div>{TransactionDetails(mockTransaction)}</div>,
     });
 
-    const detailsSpy = jest.fn();
-    page.root.addEventListener('showDetails', detailsSpy);
-
-    const row = page.root.shadowRoot.querySelector('[data-testid="transaction-row"]');
-    row?.dispatchEvent(new Event('click'));
-
-    expect(detailsSpy).toHaveBeenCalledWith(expect.any(CustomEvent));
-    expect(detailsSpy.mock.calls[0][0].detail).toEqual(mockData[0]);
+    expect(page.root.textContent).toContain('1234');
+    expect(page.root.textContent).toContain('REF123456');
   });
 
-  it('shows loading spinner when loading=true', async () => {
+  it('renders fallback for missing ticketNumber', async () => {
     const page = await newSpecPage({
-      components: [CommonTable],
-      template: () => (
-        <common-table loading={true} />
-      ),
+      components: [],
+      template: () =>
+        <div>
+          {TransactionDetails({ ...mockTransaction, ticketNumber: undefined })}
+        </div>,
     });
 
-    expect(page.root.shadowRoot.textContent).toContain('Loading...');
+    expect(page.root.textContent).toContain('N/A');
   });
 
-  it('shows no data message if table is empty and not loading', async () => {
+  it('renders nothing if transaction is undefined', async () => {
     const page = await newSpecPage({
-      components: [CommonTable],
-      template: () => (
-        <common-table tableData={[]} tableHeader={mockHeader} loading={false} error={false} />
-      ),
+      components: [],
+      template: () => <div>{TransactionDetails(undefined)}</div>,
     });
 
-    expect(page.root.shadowRoot.textContent).toContain('You have no transactions yet');
-  });
-
-  it('shows error message if error=true', async () => {
-    const page = await newSpecPage({
-      components: [CommonTable],
-      template: () => (
-        <common-table error={true} loading={false} />
-      ),
-    });
-
-    expect(page.root.shadowRoot.textContent).toContain('An error occurred');
+    expect(page.root.textContent?.trim()).toBe('');
   });
 });
