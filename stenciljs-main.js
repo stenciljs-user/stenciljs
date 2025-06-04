@@ -1,68 +1,55 @@
-import { h } from '@stencil/core';
-import { TransactionDetails } from './transaction-details';
-import { newSpecPage } from '@stencil/core/testing';
+import axios from 'axios';
+import { api } from './api'; // adjust path
+import { getApiUrl } from '../utils';
 
-describe('TransactionDetails (JSX)', () => {
-  const mockTransaction = {
-    transactionAmount: 123.45,
-    transactionDateTime: '2025-06-04T15:00:00Z',
-    transactionStatus: 'SUCCESS',
-    transactionType: 'Credit',
-    cardInformation: {
-      cardLogo: 'visa',
-      cardLastFourDigits: '1234',
-    },
-    ticketNumber: 'REF123456'
-  };
+jest.mock('axios');
+jest.mock('../utils', () => ({
+  getApiUrl: jest.fn(() => 'https://mock.api')
+}));
 
-  it('renders transaction amount', async () => {
-    const page = await newSpecPage({
-      components: [],
-      template: () => <div>{TransactionDetails(mockTransaction)}</div>,
-    });
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
-    expect(page.root.textContent).toContain('123.45');
-    expect(page.root.textContent).toContain('USD');
+describe('API Service', () => {
+  const dummyConfig = { headers: { 'X-Test': 'yes' } };
+  const dummyResponse = { data: 'mock-data' };
+
+  beforeEach(() => {
+    mockedAxios.create.mockReturnValue({
+      get: jest.fn(() => Promise.resolve(dummyResponse)),
+      post: jest.fn(() => Promise.resolve(dummyResponse)),
+      put: jest.fn(() => Promise.resolve(dummyResponse)),
+      delete: jest.fn(() => Promise.resolve({ status: 204 })),
+      interceptors: {
+        request: { use: jest.fn() },
+        response: { use: jest.fn() },
+      },
+    } as any);
   });
 
-  it('renders formatted date and status', async () => {
-    const page = await newSpecPage({
-      components: [],
-      template: () => <div>{TransactionDetails(mockTransaction)}</div>,
-    });
+  afterEach(() => jest.clearAllMocks());
 
-    expect(page.root.textContent).toContain('Date & Time');
-    expect(page.root.textContent).toContain('SUCCESS');
+  it('calls GET with correct URL and config', async () => {
+    const res = await api.get('/test-endpoint', dummyConfig);
+    expect(mockedAxios.create().get).toHaveBeenCalledWith('/test-endpoint', dummyConfig);
+    expect(res).toEqual(dummyResponse);
   });
 
-  it('renders card information and reference ID', async () => {
-    const page = await newSpecPage({
-      components: [],
-      template: () => <div>{TransactionDetails(mockTransaction)}</div>,
-    });
-
-    expect(page.root.textContent).toContain('1234');
-    expect(page.root.textContent).toContain('REF123456');
+  it('calls POST with URL, body, and config', async () => {
+    const data = { foo: 'bar' };
+    const res = await api.post('/post', data, dummyConfig);
+    expect(mockedAxios.create().post).toHaveBeenCalledWith('/post', data, dummyConfig);
+    expect(res).toEqual(dummyResponse);
   });
 
-  it('renders fallback for missing ticketNumber', async () => {
-    const page = await newSpecPage({
-      components: [],
-      template: () =>
-        <div>
-          {TransactionDetails({ ...mockTransaction, ticketNumber: undefined })}
-        </div>,
-    });
-
-    expect(page.root.textContent).toContain('N/A');
+  it('calls PUT with URL, data, and config', async () => {
+    const res = await api.put('/put', { val: 1 }, dummyConfig);
+    expect(mockedAxios.create().put).toHaveBeenCalledWith('/put', { val: 1 }, dummyConfig);
+    expect(res).toEqual(dummyResponse);
   });
 
-  it('renders nothing if transaction is undefined', async () => {
-    const page = await newSpecPage({
-      components: [],
-      template: () => <div>{TransactionDetails(undefined)}</div>,
-    });
-
-    expect(page.root.textContent?.trim()).toBe('');
+  it('calls DELETE with correct URL and config', async () => {
+    const res = await api.delete('/delete', dummyConfig);
+    expect(mockedAxios.create().delete).toHaveBeenCalledWith('/delete', dummyConfig);
+    expect(res.status).toBe(204);
   });
 });
