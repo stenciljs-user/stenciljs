@@ -1,55 +1,109 @@
-import axios from 'axios';
-import { api } from './api'; // adjust path
-import { getApiUrl } from '../utils';
+import { Component, h, Prop, Event, EventEmitter, State, Element } from '@stencil/core';
 
-jest.mock('axios');
-jest.mock('../utils', () => ({
-  getApiUrl: jest.fn(() => 'https://mock.api')
-}));
+@Component({
+  tag: 'common-date-range-picker',
+  styleUrl: 'common-date-range-picker.css',
+  shadow: false, // Required for Flowbite DOM access
+})
+export class CommonDateRangePicker {
+  @Element() el: HTMLElement;
 
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+  @Prop() label: string;
+  @Prop() startDate?: string;
+  @Prop() endDate?: string;
 
-describe('API Service', () => {
-  const dummyConfig = { headers: { 'X-Test': 'yes' } };
-  const dummyResponse = { data: 'mock-data' };
+  @Event() dateRangeChange: EventEmitter<{ start: string; end: string }>;
 
-  beforeEach(() => {
-    mockedAxios.create.mockReturnValue({
-      get: jest.fn(() => Promise.resolve(dummyResponse)),
-      post: jest.fn(() => Promise.resolve(dummyResponse)),
-      put: jest.fn(() => Promise.resolve(dummyResponse)),
-      delete: jest.fn(() => Promise.resolve({ status: 204 })),
-      interceptors: {
-        request: { use: jest.fn() },
-        response: { use: jest.fn() },
-      },
-    } as any);
-  });
+  @State() showPicker: boolean = false;
+  @State() selectedLabel: string = 'Custom Range';
 
-  afterEach(() => jest.clearAllMocks());
+  private presets = [
+    { label: 'Today', getRange: () => [new Date(), new Date()] },
+    { label: 'Last 7 Days', getRange: () => {
+      const end = new Date();
+      const start = new Date();
+      start.setDate(end.getDate() - 6);
+      return [start, end];
+    }},
+    { label: 'This Month', getRange: () => {
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      return [start, end];
+    }},
+  ];
 
-  it('calls GET with correct URL and config', async () => {
-    const res = await api.get('/test-endpoint', dummyConfig);
-    expect(mockedAxios.create().get).toHaveBeenCalledWith('/test-endpoint', dummyConfig);
-    expect(res).toEqual(dummyResponse);
-  });
+  private formatDate(date: Date) {
+    return date.toISOString().split('T')[0];
+  }
 
-  it('calls POST with URL, body, and config', async () => {
-    const data = { foo: 'bar' };
-    const res = await api.post('/post', data, dummyConfig);
-    expect(mockedAxios.create().post).toHaveBeenCalledWith('/post', data, dummyConfig);
-    expect(res).toEqual(dummyResponse);
-  });
+  private handlePresetClick = (label: string, range: [Date, Date]) => {
+    this.selectedLabel = label;
+    const [start, end] = range;
+    this.dateRangeChange.emit({ start: this.formatDate(start), end: this.formatDate(end) });
+    this.showPicker = false;
+  };
 
-  it('calls PUT with URL, data, and config', async () => {
-    const res = await api.put('/put', { val: 1 }, dummyConfig);
-    expect(mockedAxios.create().put).toHaveBeenCalledWith('/put', { val: 1 }, dummyConfig);
-    expect(res).toEqual(dummyResponse);
-  });
+  componentDidLoad() {
+    // Lazy load Flowbite date range picker
+    import('flowbite/dist/datepicker').then(() => {
+      const el = this.el.querySelector('[data-datepicker-range]');
+      const input = el?.querySelector('input');
 
-  it('calls DELETE with correct URL and config', async () => {
-    const res = await api.delete('/delete', dummyConfig);
-    expect(mockedAxios.create().delete).toHaveBeenCalledWith('/delete', dummyConfig);
-    expect(res.status).toBe(204);
-  });
-});
+      input?.addEventListener('change', () => {
+        const val = input.value; // Ex: "2025-06-01 to 2025-06-07"
+        const [start, end] = val.split(' to ');
+        this.selectedLabel = 'Custom Range';
+        this.dateRangeChange.emit({ start, end });
+      });
+    });
+  }
+
+  render() {
+    return (
+      <div class="w-full max-w-md">
+        {this.label && (
+          <label class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
+            {this.label}
+          </label>
+        )}
+
+        {/* Dropdown Trigger */}
+        <button
+          class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5 flex justify-between items-center"
+          onClick={() => this.showPicker = !this.showPicker}
+        >
+          {this.selectedLabel}
+          <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {/* Dropdown Modal */}
+        {this.showPicker && (
+          <div class="z-10 bg-white divide-y divide-gray-100 rounded-lg shadow w-full mt-2 border dark:bg-gray-700">
+            {this.presets.map(preset => (
+              <button
+                class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:text-white dark:hover:bg-gray-600"
+                onClick={() => this.handlePresetClick(preset.label, preset.getRange())}
+              >
+                {preset.label}
+              </button>
+            ))}
+
+            <div class="p-4 border-t">
+              <div data-datepicker-range class="relative">
+                <input
+                  type="text"
+                  class="w-full border border-gray-300 rounded-md p-2 text-sm"
+                  placeholder="Select custom range"
+                  data-testid="range-picker"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+}
