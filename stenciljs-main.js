@@ -1,94 +1,97 @@
-import { newSpecPage } from '@stencil/core/testing';
-import { CommonButton } from './common-button';
+import axios from 'axios';
+import api from './api'; // your axios wrapper
+import type { AxiosRequestConfig } from 'axios';
 
-describe('common-button', () => {
-  it('renders with label', async () => {
-    const page = await newSpecPage({
-      components: [CommonButton],
-      html: `<common-button label="Click Me"></common-button>`,
-    });
+jest.mock('axios');
 
-    expect(page.root.shadowRoot.textContent).toContain('Click Me');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+describe('Axios API wrapper', () => {
+  const fakeToken = 'test-token';
+  const headers = { Authorization: `Bearer ${fakeToken}` };
+
+  beforeEach(() => {
+    localStorage.setItem('authToken', fakeToken);
+    mockedAxios.create.mockReturnThis(); // important: mock .create()
   });
 
-  it('renders with slot fallback when label is not provided', async () => {
-    const page = await newSpecPage({
-      components: [CommonButton],
-      html: `<common-button><span>Slot Label</span></common-button>`,
-    });
-
-    expect(page.root.shadowRoot.querySelector('button')?.innerHTML).toContain('<slot>');
+  afterEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
   });
 
-  it('applies primary variant styles by default', async () => {
-    const page = await newSpecPage({
-      components: [CommonButton],
-      html: `<common-button label="Primary"></common-button>`,
+  it('should send GET request with token and return typed data', async () => {
+    const responseData = { value: 123 };
+    mockedAxios.get.mockResolvedValueOnce({
+      data: responseData,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
     });
 
-    const classList = page.root.shadowRoot.querySelector('button')?.className;
-    expect(classList).toContain('bg-primary-default');
+    const result = await api.get<typeof responseData>('test-url', {});
+    expect(result.data).toEqual(responseData);
+    expect(mockedAxios.get).toHaveBeenCalledWith('test-url', expect.objectContaining({
+      headers: expect.objectContaining(headers),
+    }));
   });
 
-  it('applies secondary variant styles', async () => {
-    const page = await newSpecPage({
-      components: [CommonButton],
-      html: `<common-button label="Secondary" variant="secondary"></common-button>`,
+  it('should send POST request with body and return typed data', async () => {
+    const postData = { foo: 'bar' };
+    mockedAxios.post.mockResolvedValueOnce({
+      data: postData,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
     });
 
-    const classList = page.root.shadowRoot.querySelector('button')?.className;
-    expect(classList).toContain('bg-secondary-default');
+    const result = await api.post<typeof postData>('test-url', postData, {});
+    expect(result.data).toEqual(postData);
+    expect(mockedAxios.post).toHaveBeenCalledWith('test-url', postData, expect.anything());
   });
 
-  it('does not emit event when disabled', async () => {
-    const page = await newSpecPage({
-      components: [CommonButton],
-      html: `<common-button label="Disabled" disabled></common-button>`,
+  it('should send PUT request and return typed data', async () => {
+    const putData = { updated: true };
+    mockedAxios.put.mockResolvedValueOnce({
+      data: putData,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {},
     });
 
-    const button = page.rootInstance;
-    const spy = jest.fn();
-    button.buttonClicked = {
-      emit: spy,
-    } as any;
-
-    await page.root.shadowRoot.querySelector('button')?.click();
-    expect(spy).not.toHaveBeenCalled();
+    const result = await api.put<typeof putData>('test-url', putData, {});
+    expect(result.data).toEqual(putData);
+    expect(mockedAxios.put).toHaveBeenCalledWith('test-url', putData, expect.anything());
   });
 
-  it('emits buttonClicked when enabled and clicked', async () => {
-    const page = await newSpecPage({
-      components: [CommonButton],
-      html: `<common-button label="Click Me"></common-button>`,
+  it('should send DELETE request and return success response', async () => {
+    mockedAxios.delete.mockResolvedValueOnce({
+      status: 204,
+      statusText: 'No Content',
+      headers: {},
+      config: {},
     });
 
-    const instance = page.rootInstance;
-    const spy = jest.fn();
-    instance.buttonClicked = {
-      emit: spy,
-    } as any;
-
-    await page.root.shadowRoot.querySelector('button')?.click();
-    expect(spy).toHaveBeenCalledTimes(1);
+    const result = await api.delete('test-url', {});
+    expect(result.status).toEqual(204);
+    expect(result.statusText).toBe('No Content');
+    expect(mockedAxios.delete).toHaveBeenCalledWith('test-url', expect.anything());
   });
 
-  it('appends additional classNames', async () => {
-    const page = await newSpecPage({
-      components: [CommonButton],
-      html: `<common-button label="Styled" class-names="custom-class"></common-button>`,
-    });
+  it('should handle 401 error globally', async () => {
+    const error = {
+      response: { status: 401, statusText: 'Unauthorized' },
+    };
+    mockedAxios.get.mockRejectedValueOnce(error);
 
-    const classList = page.root.shadowRoot.querySelector('button')?.className;
-    expect(classList).toContain('custom-class');
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(api.get('unauthorized-endpoint', {})).rejects.toEqual(error);
+
+    expect(consoleSpy).toHaveBeenCalledWith('Unauthorized Access', error);
+    consoleSpy.mockRestore();
   });
-
-  it('wraps content in <common-button> host element', async () => {
-    const page = await newSpecPage({
-      components: [CommonButton],
-      html: `<common-button label="Test"></common-button>`,
-    });
-
-    expect(page.root.tagName).toBe('COMMON-BUTTON');
-    expect(page.root.shadowRoot.querySelector('button')).toBeTruthy();
-  });
-});
+});i'm 
