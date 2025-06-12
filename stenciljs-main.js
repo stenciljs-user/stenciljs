@@ -1,7 +1,8 @@
+// 👇 This MUST come first before any imports
+jest.mock('axios');
+
 import api from './api';
 import axios from 'axios';
-
-jest.mock('axios'); // uses your __mocks__/axios.ts
 
 const mockedAxios = axios as any;
 
@@ -19,26 +20,26 @@ describe('API wrapper with mocked axios', () => {
 
   it('should call GET and return response', async () => {
     const result = await api.get('test-url', {});
-    expect(mockedAxios.get).toHaveBeenCalledWith('test-url', expect.anything());
+    expect(mockedAxios.__instance.get).toHaveBeenCalledWith('test-url', expect.anything());
     expect(result).toEqual({ data: {} });
   });
 
   it('should call POST and return response', async () => {
     const postData = { name: 'test' };
     const result = await api.post('test-url', postData, {});
-    expect(mockedAxios.post).toHaveBeenCalledWith('test-url', postData, expect.anything());
+    expect(mockedAxios.__instance.post).toHaveBeenCalledWith('test-url', postData, expect.anything());
     expect(result).toEqual({ data: {} });
   });
 
   it('should call PUT and return response', async () => {
     const putData = { id: 1 };
     const result = await api.put('test-url', putData, {});
-    expect(mockedAxios.put).toHaveBeenCalledWith('test-url', putData, expect.anything());
+    expect(mockedAxios.__instance.put).toHaveBeenCalledWith('test-url', putData, expect.anything());
     expect(result).toEqual({ data: {} });
   });
 
   it('should call DELETE and return structured response', async () => {
-    mockedAxios.delete.mockResolvedValueOnce({
+    mockedAxios.__instance.delete.mockResolvedValueOnce({
       data: undefined,
       status: 204,
       statusText: 'No Content',
@@ -47,7 +48,7 @@ describe('API wrapper with mocked axios', () => {
     });
 
     const result = await api.delete('test-url', {});
-    expect(mockedAxios.delete).toHaveBeenCalledWith('test-url', expect.anything());
+    expect(mockedAxios.__instance.delete).toHaveBeenCalledWith('test-url', expect.anything());
     expect(result).toMatchObject({
       data: undefined,
       status: 204,
@@ -57,7 +58,7 @@ describe('API wrapper with mocked axios', () => {
 
   it('should inject Authorization token in request interceptor', async () => {
     const config = { headers: {} };
-    const interceptor = mockedAxios.create().interceptors;
+    const interceptor = mockedAxios.__instance.interceptors;
 
     const result = await interceptor.request.use((cfg: any) => {
       const token = localStorage.getItem('authToken');
@@ -71,8 +72,8 @@ describe('API wrapper with mocked axios', () => {
   });
 
   it('should reject unauthorized 401 response and log error', async () => {
-    const interceptor = mockedAxios.create().interceptors;
     const error = { response: { status: 401 }, message: 'Unauthorized' };
+    const interceptor = mockedAxios.__instance.interceptors;
 
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -88,6 +89,7 @@ describe('API wrapper with mocked axios', () => {
 
     expect(consoleSpy).toHaveBeenCalledWith('Unauthorized Access', error);
     expect(rejected).toBe(error);
+
     consoleSpy.mockRestore();
   });
 });
