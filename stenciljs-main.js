@@ -1,95 +1,213 @@
-// 👇 This MUST come first before any imports
-jest.mock('axios');
+import { Component, h, State, Prop, Watch } from '@stencil/core';
+import { initiatePaymentSession, PaymentPayload } from '../../api/initiate-payment-api';
 
-import api from './api';
-import axios from 'axios';
+@Component({
+  tag: 'payment-iframe',
+  styleUrl: 'payment-iframe.css',
+  shadow: false,
+})
+export class PaymentIframeComponent {
+  @Prop() accountId: string;
+  @Prop() merchantId: string;
+  @Prop() accountToken: string;
+  @Prop() amount: string;
+  @Prop() returnUrl: string;
+  @Prop() logoUrl: string;
+  @Prop() tagline: string;
+  @Prop() companyName: string;
+  @Prop() embedded: number = 0;
+  @Prop() customCss: string;
+  @Prop() title: string;
 
-const mockedAxios = axios as any;
+  @State() iframeUrl: string = '';
+  @State() paymentResponse: any = null;
 
-describe('API wrapper with mocked axios', () => {
-  const token = 'mock-token';
+  @Watch('amount')
+  async onAmountChange(): Promise<void> {
+    await this.initializePayment();
+  }
 
-  beforeEach(() => {
-    localStorage.setItem('authToken', token);
-    jest.clearAllMocks();
-  });
+  async componentWillLoad(): Promise<void> {
+    await this.initializePayment();
+  }
 
-  afterEach(() => {
-    localStorage.clear();
-  });
+  private async initializePayment(): Promise<void> {
+    const payload: PaymentPayload = {
+      amount: this.amount,
+      returnURL: this.returnUrl,
+      logoURL: this.logoUrl,
+      customCss: this.customCss,
+      embedded: this.embedded,
+      title: this.title,
+      tagline: this.tagline,
+      companyName: this.companyName,
+      accountId: this.accountId,
+      merchantId: this.merchantId,
+      accountToken: this.accountToken,
+    };
 
-  it('should call GET and return response', async () => {
-    const result = await api.get('test-url', {});
-    expect(mockedAxios.__instance.get).toHaveBeenCalledWith('test-url', expect.anything());
-    expect(result).toEqual({ data: {} });
-  });
-
-  it('should call POST and return response', async () => {
-    const postData = { name: 'test' };
-    const result = await api.post('test-url', postData, {});
-    expect(mockedAxios.__instance.post).toHaveBeenCalledWith('test-url', postData, expect.anything());
-    expect(result).toEqual({ data: {} });
-  });
-
-  it('should call PUT and return response', async () => {
-    const putData = { id: 1 };
-    const result = await api.put('test-url', putData, {});
-    expect(mockedAxios.__instance.put).toHaveBeenCalledWith('test-url', putData, expect.anything());
-    expect(result).toEqual({ data: {} });
-  });
-
-  it('should call DELETE and return structured response', async () => {
-    mockedAxios.__instance.delete.mockResolvedValueOnce({
-      data: undefined,
-      status: 204,
-      statusText: 'No Content',
-      headers: {},
-      config: {},
-    });
-
-    const result = await api.delete('test-url', {});
-    expect(mockedAxios.__instance.delete).toHaveBeenCalledWith('test-url', expect.anything());
-    expect(result).toMatchObject({
-      data: undefined,
-      status: 204,
-      statusText: 'No Content',
-    });
-  });
-
-  it('should inject Authorization token in request interceptor', async () => {
-    const config = { headers: {} };
-    const interceptor = mockedAxios.__instance.interceptors;
-
-    const result = await interceptor.request.use((cfg: any) => {
-      const token = localStorage.getItem('authToken');
-      if (token) {
-        cfg.headers.Authorization = `Bearer ${token}`;
+    try {
+      const response = await initiatePaymentSession(payload);
+      const transactionSetupID = response?.TransactionSetupResponse?.TransactionSetupID;
+      if (transactionSetupID) {
+        this.iframeUrl = `https://certpayments.elementexpress.com/express.asmx/hpp/${transactionSetupID}`;
+      } else {
+        console.warn('TransactionSetupID not returned in response');
       }
-      return cfg;
-    })(config);
+    } catch (error) {
+      console.error('Payment session initialization failed:', error);
+    }
+  }
 
-    expect(result.headers.Authorization).toBe(`Bearer ${token}`);
+  componentDidLoad(): void {
+    if (window['WPCL'] && this.iframeUrl) {
+      const library = new window['WPCL'].Library();
+      library.setup({
+        url: this.iframeUrl,
+        type: 'iframe',
+        inject: 'immediate',
+        target: 'custom-html',
+        accessibility: true,
+        debug: true,
+        language: 'en',
+        resultCallback: (result: any) => {
+          this.paymentResponse = result;
+        },
+      });
+    }
+  }
+
+  render() {
+    return (
+      <div>
+        {!this.paymentResponse && <div id="custom-html"></div>}
+        {this.paymentResponse && (
+          <div>
+            <h4>Payment Result:</h4>
+            <pre>{JSON.stringify(this.paymentResponse, null, 2)}</pre>
+          </div>
+        )}
+      </div>
+    );
+  }
+}
+
+
+
+import { updateXmlValues, xmlToObject, ExpressHPA_1 } from '../../utils/xml-utils';
+
+export interface PaymentPayload {
+  amount: string;
+  returnURL: string;
+  logoURL?: string;
+  customCss?: string;
+  embedded?: number;
+  title?: string;
+  tagline?: string;
+  companyName?: string;
+  accountId: string;
+  merchantId: string;
+  accountToken: string;
+}
+
+/**
+ * Initiates a Worldpay Express hosted payment session.
+ * @param payload - Configuration data for the payment setup request.
+ * @returns Parsed object response from Worldpay API.
+ */
+export const initiatePaymentSession = async (payload: PaymentPayload): Promise<any> => {
+  const updates = {
+    TransactionAmount: payload.amount,
+    AccountID: payload.accountId,
+    AccountToken: payload.accountToken,
+    AcceptorID: payload.merchantId,
+    ApplicationID: '20437',
+    ReturnURL: payload.returnURL,
+    HostedCustomization: payload.customCss ?? '',
+    Embedded: (payload.embedded ?? 0).toString(),
+    LogoURL: payload.logoURL ?? '',
+    WelcomeMessage: payload.title ?? '',
+    Tagline: payload.tagline ?? '',
+    CompanyName: payload.companyName ?? 'Payment App',
+  };
+
+  const requestBody = updateXmlValues(ExpressHPA_1, updates);
+
+  const response = await fetch('https://certtransaction.elementexpress.com', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/xml',
+    },
+    body: requestBody,
   });
 
-  it('should reject unauthorized 401 response and log error', async () => {
-    const error = { response: { status: 401 }, message: 'Unauthorized' };
-    const interceptor = mockedAxios.__instance.interceptors;
+  if (!response.ok) {
+    throw new Error(`Failed to initiate payment session. Status: ${response.status}`);
+  }
 
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  const xmlText = await response.text();
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+  return xmlToObject(xmlDoc);
+};
 
-    const rejected = await interceptor.response.use(
-      (res: any) => res,
-      (err: any) => {
-        if (err.response?.status === 401) {
-          console.error('Unauthorized Access', err);
+
+
+/**
+ * Converts an XML DOM structure into a JavaScript object.
+ */
+export const xmlToObject = (xml: any): any => {
+  let obj: any = {};
+
+  if (xml.nodeType === 1 && xml.attributes.length > 0) {
+    obj['@attributes'] = {};
+    for (let j = 0; j < xml.attributes.length; j++) {
+      const attr = xml.attributes.item(j);
+      obj['@attributes'][attr.nodeName] = attr.nodeValue;
+    }
+  } else if (xml.nodeType === 3) {
+    obj = xml.nodeValue;
+  }
+
+  if (xml.hasChildNodes()) {
+    for (let i = 0; i < xml.childNodes.length; i++) {
+      const item = xml.childNodes.item(i);
+      const nodeName = item.nodeName;
+      if (!obj[nodeName]) {
+        obj[nodeName] = xmlToObject(item);
+      } else {
+        if (!Array.isArray(obj[nodeName])) {
+          obj[nodeName] = [obj[nodeName]];
         }
-        return Promise.reject(err);
+        obj[nodeName].push(xmlToObject(item));
       }
-    )(error).catch(e => e);
+    }
+  }
 
-    expect(consoleSpy).toHaveBeenCalledWith('Unauthorized Access', error);
-    expect(rejected).toBe(error);
+  return obj;
+};
 
-    consoleSpy.mockRestore();
-  });
-});
+/**
+ * Replaces a specific tag's content inside an XML string.
+ */
+function replaceXmlTagValue(xml: string, tag: string, value: string): string {
+  const regex = new RegExp(`(<${tag}>)(.*?)(</${tag}>)`, 'g');
+  return xml.replace(regex, `$1${value}$3`);
+}
+
+/**
+ * Applies a bulk set of tag replacements to an XML string.
+ */
+export function updateXmlValues(xml: string, updates: Record<string, string>): string {
+  let updatedXml = xml;
+  for (const tag in updates) {
+    updatedXml = replaceXmlTagValue(updatedXml, tag, updates[tag]);
+  }
+  return updatedXml;
+}
+
+/**
+ * Base XML template for Worldpay Express Hosted Payment Page.
+ */
+export const ExpressHPA_1 = `...`; // Insert actual long XML template here or import externally
+
