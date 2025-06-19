@@ -1,102 +1,90 @@
 import { newSpecPage } from '@stencil/core/testing';
-import { PaymentProcessing } from './payment-processing';
-import * as merchantModule from '../../services/merchantTransactionSetup/merchantTransactionSetup';
-import * as xmlUtils from '../../utils/xmlUtils';
+import { OrderSummary } from './order-summary';
 
-describe('payment-processing', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+const mockOrderSummary = JSON.stringify({
+  items: [
+    {
+      productName: 'Item 1',
+      description: 'Desc 1',
+      quantity: 2,
+      productAmount: 15.0
+    },
+    {
+      productName: 'Item 2',
+      description: 'Desc 2',
+      quantity: 1,
+      productAmount: 10.0
+    },
+    {
+      productName: 'Item 3',
+      description: 'Desc 3',
+      quantity: 1,
+      productAmount: 20.0
+    },
+    {
+      productName: 'Item 4',
+      description: 'Desc 4',
+      quantity: 3,
+      productAmount: 30.0
+    },
+    {
+      productName: 'Item 5',
+      description: 'Desc 5',
+      quantity: 1,
+      productAmount: 25.0
+    }
+  ],
+  currency: 'USD',
+  subtotal: 100,
+  estimatedShipping: 5,
+  total: 105
+});
+
+describe('order-summary', () => {
+  it('renders nothing if invalid summary', async () => {
+    const page = await newSpecPage({
+      components: [OrderSummary],
+      html: `<order-summary order-summary="{}"></order-summary>`
+    });
+    expect(page.root).toBeNull();
   });
 
-  it('renders loader initially', async () => {
+  it('renders summary if valid input', async () => {
     const page = await newSpecPage({
-      components: [PaymentProcessing],
-      html: `<payment-processing></payment-processing>`
+      components: [OrderSummary],
+      html: `<order-summary order-summary='${mockOrderSummary}'></order-summary>`
     });
-
     expect(page.root).toBeDefined();
-    expect(page.root.querySelector('common-loader')).toBeTruthy();
+    expect(page.root.querySelectorAll('button').length).toBe(1); // Show all items button
+    expect(page.root.textContent).toContain('Order Summary');
+    expect(page.root.textContent).toContain('Show all 5 items');
+    expect(page.root.textContent).toContain('Subtotal');
+    expect(page.root.textContent).toContain('Estimated shipping');
+    expect(page.root.textContent).toContain('Total');
   });
 
-  it('initializes payment session and sets iframe URL', async () => {
-    const mockSetLoading = jest.fn();
-    const mockSetError = jest.fn();
-
-    const mockResponse = {
-      data: '<Response><TransactionSetupResponse><Response><TransactionSetupID><#text>abc123</#text></TransactionSetupID></Response></TransactionSetupResponse></Response>'
-    };
-
-    const mockXmlObject = {
-      TransactionSetupResponse: {
-        Response: {
-          TransactionSetupID: {
-            '#text': 'abc123'
-          }
-        }
-      }
-    };
-
-    jest.spyOn(merchantModule, 'merchantTransactionSetup').mockResolvedValue(mockResponse);
-    jest.spyOn(xmlUtils, 'xmlToObject').mockReturnValue(mockXmlObject);
-
+  it('renders modal with all products if items are present', async () => {
     const page = await newSpecPage({
-      components: [PaymentProcessing],
-      html: `<payment-processing></payment-processing>`
+      components: [OrderSummary],
+      html: `<order-summary order-summary='${mockOrderSummary}'></order-summary>`
     });
 
     const component = page.rootInstance;
-    expect(component.iframeUrl).toBe('abc123');
+    const modalContent = component['getOrderSummaryView'](JSON.parse(mockOrderSummary).items, true);
+
+    expect(modalContent.length).toBe(5);
+    expect(modalContent[0].nodeName).toBe('DIV');
   });
 
-  it('handles missing transaction ID', async () => {
-    const mockResponse = {
-      data: '<Invalid></Invalid>'
-    };
-
-    const mockXmlObject = {}; // No TransactionSetupID
-
-    jest.spyOn(merchantModule, 'merchantTransactionSetup').mockResolvedValue(mockResponse);
-    jest.spyOn(xmlUtils, 'xmlToObject').mockReturnValue(mockXmlObject);
-    console.warn = jest.fn();
+  it('renders correctly for fewer than 4 items', async () => {
+    const smallSummary = JSON.parse(mockOrderSummary);
+    smallSummary.items = smallSummary.items.slice(0, 3);
 
     const page = await newSpecPage({
-      components: [PaymentProcessing],
-      html: `<payment-processing></payment-processing>`
+      components: [OrderSummary],
+      html: `<order-summary order-summary='${JSON.stringify(smallSummary)}'></order-summary>`
     });
 
-    const component = page.rootInstance;
-    expect(component.iframeUrl).toBe('');
-    expect(console.warn).toHaveBeenCalledWith('TransactionSetupID not returned in response');
-  });
-
-  it('handles payment session initialization failure', async () => {
-    jest.spyOn(merchantModule, 'merchantTransactionSetup').mockRejectedValue(new Error('Failed'));
-    console.error = jest.fn();
-
-    const page = await newSpecPage({
-      components: [PaymentProcessing],
-      html: `<payment-processing></payment-processing>`
-    });
-
-    expect(console.error).toHaveBeenCalledWith('Payment session initialization failed:', expect.any(Error));
-  });
-
-  it('displays alert message based on status', async () => {
-    const page = await newSpecPage({
-      components: [PaymentProcessing],
-      html: `<payment-processing></payment-processing>`
-    });
-
-    const component = page.rootInstance;
-    const alert = component['getAlertMessage']('SUCCESS');
-    expect(alert).toMatchInlineSnapshot(`
-      <div class="pt-[12px]">
-        <common-alert
-          classnames="mx-2"
-          message=""
-          type="SUCCESS"
-        />
-      </div>
-    `);
+    expect(page.root.querySelector('button')).toBeNull(); // No "Show all" button
   });
 });
