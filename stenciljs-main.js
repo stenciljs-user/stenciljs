@@ -1,84 +1,98 @@
-import { newSpecPage } from '@stencil/core/testing';
-import { BillingAddress } from '../billing-address';
+import { Component, Host, h, Prop, Event, EventEmitter } from '@stencil/core';
 
-const mockProps = {
-  billingAddress1: '123 Main St',
-  billingAddress2: 'Apt 4B',
-  billingCity: 'Denver',
-  billingState: 'CO',
-  billingZipcode: '80202',
-  billingEmail: 'john.doe@example.com',
-  billingPhone: '1234567890',
-};
+@Component({
+  tag: 'shipping-address',
+  styleUrl: 'shipping-address.css',
+  shadow: true,
+})
+export class ShippingAddress {
+  @Prop() shippingAddress: any;
+  @Prop() hasBillingAddress: boolean;
 
-const mockBillingAddressString = JSON.stringify(mockProps);
+  /**
+   * Fires when the shipping address same checkbox is clicked
+   */
+  @Event() handleBillingAddressCheck: EventEmitter<any>;
 
-describe('billing-address', () => {
-  it('renders empty form if no props passed', async () => {
-    const page = await newSpecPage({
-      components: [BillingAddress],
-      html: '<billing-address></billing-address>',
-    });
-    expect(page.root).toBeTruthy();
-    expect(page.root.shadowRoot.querySelector('input')).toBeTruthy();
-  });
+  private isValidShippingAddress(obj: any) {
+    return (
+      obj &&
+      typeof obj?.shippingAddress1 === 'string' &&
+      typeof obj?.shippingCity === 'string' &&
+      typeof obj?.shippingState === 'string' &&
+      typeof obj?.shippingZipcode === 'string'
+    );
+  }
 
-  it('renders summary view when valid billingAddress is passed', async () => {
-    const page = await newSpecPage({
-      components: [BillingAddress],
-      html: `<billing-address billing-address='${mockBillingAddressString}'></billing-address>`,
-    });
-    expect(page.root.shadowRoot.textContent).toContain('Billing information');
-    expect(page.root.shadowRoot.textContent).toContain('123 Main St');
-  });
+  private convertShippingToBilling(shippingAddress) {
+    const billingAddress = {};
 
-  it('renders form view when no billingAddress passed', async () => {
-    const page = await newSpecPage({
-      components: [BillingAddress],
-      html: '<billing-address></billing-address>',
-    });
-    expect(page.root.shadowRoot.querySelector('input[placeholder="Address"]')).toBeTruthy();
-  });
+    for (const key in shippingAddress) {
+      if (shippingAddress.hasOwnProperty(key)) {
+        const billingKey = key.replace(/^shipping/, 'billing');
+        billingAddress[billingKey] = shippingAddress[key];
+      }
+    }
 
-  it('marks required fields invalid on empty submit', async () => {
-    const page = await newSpecPage({
-      components: [BillingAddress],
-      html: '<billing-address></billing-address>',
-    });
-    const instance = page.rootInstance;
-    instance.handleContinue();
-    await page.waitForChanges();
-    expect(instance.isValid).toBe(false);
-    expect(Object.keys(instance.formErrors).length).toBeGreaterThan(0);
-  });
+    return billingAddress;
+  }
 
-  it('emits billingAddressSubmit event on valid submit', async () => {
-    const page = await newSpecPage({
-      components: [BillingAddress],
-      html: '<billing-address></billing-address>',
-    });
-    const instance = page.rootInstance;
-    Object.assign(instance.billingForm, mockProps);
-    instance.isFormSubmitted = true;
-    instance.handleContinue();
-    await page.waitForChanges();
+  private handleBillingAddressCheckbox(shippingAddressParsed) {
+    const billingAddress = this.convertShippingToBilling(shippingAddressParsed);
+    this.handleBillingAddressCheck.emit(billingAddress);
+  }
 
-    const eventSpy = jest.fn();
-    page.root.addEventListener('billingAddressSubmit', eventSpy);
+  render() {
+    const shippingAddressParsed = JSON.parse(this.shippingAddress);
+    const isShippingAddressValid =
+      this.shippingAddress &&
+      shippingAddressParsed &&
+      !this.isValidShippingAddress(shippingAddressParsed);
+    if (isShippingAddressValid) {
+      return null;
+    }
 
-    instance.handleContinue();
-    await page.waitForChanges();
-    expect(eventSpy).toHaveBeenCalled();
-  });
-
-  it('allows editing after clicking Edit', async () => {
-    const page = await newSpecPage({
-      components: [BillingAddress],
-      html: `<billing-address billing-address='${mockBillingAddressString}'></billing-address>`,
-    });
-    const editBtn = page.root.shadowRoot.querySelector('common-button');
-    editBtn.click();
-    await page.waitForChanges();
-    expect(page.rootInstance.isFormEditable).toBe(true);
-  });
-});
+    return (
+      <Host>
+        <div class="p-5 bg-gray-50 border border-secondary-stroke rounded-lg dark:bg-gray-800 dark:border-gray-700 my-4">
+          <h2 class="text-gray-900 font-semibold text-md">
+            Shipping and shipping information
+          </h2>
+          <div>
+            <h5 class="text-gray-600 text-sm">
+              {shippingAddressParsed?.shippingName}
+            </h5>
+            <h5 class="text-gray-600 text-sm">
+              {shippingAddressParsed?.shippingEmail}
+            </h5>
+            <h5 class="text-gray-600 text-sm">
+              {' '}
+              {shippingAddressParsed?.shippingAddress1}
+            </h5>
+            <h5 class="text-gray-600 text-sm">
+              {shippingAddressParsed?.shippingCity} {', '}
+              {shippingAddressParsed?.shippingState}
+              {shippingAddressParsed?.shippingZipcode}
+            </h5>
+          </div>
+          {!this.hasBillingAddress && (
+            <div class="flex items-center my-2">
+              <input
+                id="default-checkbox"
+                type="checkbox"
+                value=""
+                onClick={() =>
+                  this.handleBillingAddressCheckbox(shippingAddressParsed)
+                }
+                class="w-4 h-4 text-gray-600 bg-gray-100 border-gray-300 rounded-sm focus:ring-blue-500focus:ring-2"
+              ></input>
+              <label class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">
+                Billing address is the same as shipping address
+              </label>
+            </div>
+          )}
+        </div>
+      </Host>
+    );
+  }
+}
