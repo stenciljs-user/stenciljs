@@ -1,3 +1,114 @@
+import { Component, Prop, h, Event, EventEmitter, State, Watch } from '@stencil/core';
+
+@Component({
+  tag: 'common-select',
+  styleUrl: 'common-select.css',
+  shadow: true,
+})
+export class CommonSelect {
+  /**
+   * Options to display in the dropdown
+   */
+  @Prop() options: string[] = [];
+
+  /**
+   * Placeholder option text
+   */
+  @Prop() placeholder: string = 'Select an option';
+
+  /**
+   * Initial or selected value
+   */
+  @Prop() value: string = '';
+
+  /**
+   * Name or ID for the select field
+   */
+  @Prop() name: string = '';
+
+  /**
+   * Whether the field is required
+   */
+  @Prop() required: boolean = false;
+
+  /**
+   * Custom error message (if required field is empty)
+   */
+  @Prop() requiredErrorText: string = 'This field is required.';
+
+  /**
+   * Whether the field is disabled
+   */
+  @Prop() disabled: boolean = false;
+
+  /**
+   * Optional external class override
+   */
+  @Prop() classNames: string = '';
+
+  /**
+   * Emit event when value changes
+   */
+  @Event() valueChanged: EventEmitter<string>;
+
+  @State() showError: boolean = false;
+
+  @Watch('value')
+  validateOnValueChange(newValue: string) {
+    if (this.required && !newValue) {
+      this.showError = true;
+    } else {
+      this.showError = false;
+    }
+  }
+
+  private onInputChange = (event: Event) => {
+    const selected = (event.target as HTMLSelectElement).value;
+    this.valueChanged.emit(selected);
+
+    if (this.required) {
+      this.showError = !selected;
+    }
+  };
+
+  render() {
+    return (
+      <div class="relative">
+        <select
+          id={this.name}
+          name={this.name}
+          value={this.value}
+          aria-label={this.name}
+          aria-invalid={this.showError ? 'true' : 'false'}
+          aria-describedby={this.showError ? `${this.name}-error` : null}
+          disabled={this.disabled}
+          class={`bg-gray-50 border ${
+            this.showError ? 'border-red-500' : 'border-gray-300'
+          } text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 ${this.classNames}`}
+          onInput={this.onInputChange}
+        >
+          <option value="">{this.placeholder}</option>
+          {this.options.map((option) => (
+            <option value={option} selected={option === this.value}>
+              {option}
+            </option>
+          ))}
+        </select>
+
+        {this.showError && (
+          <p
+            id={`${this.name}-error`}
+            class="mt-1 text-sm text-red-600 font-medium"
+          >
+            {this.requiredErrorText}
+          </p>
+        )}
+      </div>
+    );
+  }
+}
+
+
 import {
   Component,
   h,
