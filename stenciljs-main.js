@@ -1,3 +1,139 @@
+
+import { newSpecPage } from '@stencil/core/testing';
+import { CommonSelect } from './common-select';
+
+describe('common-select', () => {
+  const defaultProps = {
+    name: 'test-select',
+    options: ['Option 1', 'Option 2', 'Option 3'],
+    placeholder: 'Choose one',
+    requiredErrorText: 'Required!',
+  };
+
+  it('renders with options and placeholder', async () => {
+    const page = await newSpecPage({
+      components: [CommonSelect],
+      html: `<common-select name="test-select" placeholder="Choose one" options='["Option 1","Option 2"]'></common-select>`,
+    });
+
+    const select = page.root.shadowRoot.querySelector('select');
+    const options = page.root.shadowRoot.querySelectorAll('option');
+
+    expect(select).toBeTruthy();
+    expect(options.length).toBe(3); // includes placeholder
+    expect(options[0].textContent).toBe('Choose one');
+  });
+
+  it('emits valueChanged event on input change', async () => {
+    const page = await newSpecPage({
+      components: [CommonSelect],
+      props: { ...defaultProps },
+    });
+
+    const mockHandler = jest.fn();
+    page.root.addEventListener('valueChanged', mockHandler);
+
+    const select = page.root.shadowRoot.querySelector('select') as HTMLSelectElement;
+    select.value = 'Option 2';
+    select.dispatchEvent(new Event('input'));
+
+    await page.waitForChanges();
+    expect(mockHandler).toHaveBeenCalled();
+    expect(mockHandler.mock.calls[0][0].detail).toBe('Option 2');
+  });
+
+  it('shows error when required field left empty', async () => {
+    const page = await newSpecPage({
+      components: [CommonSelect],
+      props: {
+        ...defaultProps,
+        required: true,
+        value: '',
+      },
+    });
+
+    const select = page.root.shadowRoot.querySelector('select') as HTMLSelectElement;
+    select.value = '';
+    select.dispatchEvent(new Event('input'));
+    await page.waitForChanges();
+
+    const errorText = page.root.shadowRoot.querySelector('p');
+    expect(errorText).toBeTruthy();
+    expect(errorText.textContent).toBe('Required!');
+  });
+
+  it('hides error when valid value selected after invalid', async () => {
+    const page = await newSpecPage({
+      components: [CommonSelect],
+      props: {
+        ...defaultProps,
+        required: true,
+        value: '',
+      },
+    });
+
+    const select = page.root.shadowRoot.querySelector('select') as HTMLSelectElement;
+    select.value = '';
+    select.dispatchEvent(new Event('input'));
+    await page.waitForChanges();
+
+    select.value = 'Option 1';
+    select.dispatchEvent(new Event('input'));
+    await page.waitForChanges();
+
+    const errorText = page.root.shadowRoot.querySelector('p');
+    expect(errorText).toBeNull();
+  });
+
+  it('renders as disabled when disabled prop is true', async () => {
+    const page = await newSpecPage({
+      components: [CommonSelect],
+      props: {
+        ...defaultProps,
+        disabled: true,
+      },
+    });
+
+    const select = page.root.shadowRoot.querySelector('select');
+    expect(select.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('renders selected value correctly', async () => {
+    const page = await newSpecPage({
+      components: [CommonSelect],
+      props: {
+        ...defaultProps,
+        value: 'Option 3',
+      },
+    });
+
+    const selectedOption = page.root.shadowRoot.querySelector('option[selected]');
+    expect(selectedOption).toBeTruthy();
+    expect(selectedOption.getAttribute('value')).toBe('Option 3');
+  });
+
+  it('sets proper aria attributes when error is shown', async () => {
+    const page = await newSpecPage({
+      components: [CommonSelect],
+      props: {
+        ...defaultProps,
+        required: true,
+        value: '',
+      },
+    });
+
+    const select = page.root.shadowRoot.querySelector('select');
+    select.value = '';
+    select.dispatchEvent(new Event('input'));
+    await page.waitForChanges();
+
+    expect(select.getAttribute('aria-invalid')).toBe('true');
+    expect(select.getAttribute('aria-describedby')).toContain('test-select-error');
+  });
+});
+
+
+
 import { Component, Prop, h, Event, EventEmitter, State, Watch } from '@stencil/core';
 
 @Component({
