@@ -1,116 +1,90 @@
-import { Component, Host, h, Prop, Event, EventEmitter } from '@stencil/core';
+import { newSpecPage } from '@stencil/core/testing';
+import { ShippingAddress } from './shipping-address';
 
-interface ShippingAddressType {
-  shippingName: string;
-  shippingEmail: string;
-  shippingAddress1: string;
-  shippingCity: string;
-  shippingState: string;
-  shippingZipcode: string;
-}
+const validShippingAddress = JSON.stringify({
+  shippingName: 'John Doe',
+  shippingEmail: 'john@example.com',
+  shippingAddress1: '123 Main St',
+  shippingCity: 'Denver',
+  shippingState: 'CO',
+  shippingZipcode: '80202'
+});
 
-interface BillingAddressType {
-  billingName?: string;
-  billingEmail?: string;
-  billingAddress1?: string;
-  billingCity?: string;
-  billingState?: string;
-  billingZipcode?: string;
-}
+const invalidShippingAddress = JSON.stringify({
+  shippingCity: 'Denver',
+  shippingZipcode: 80202
+});
 
-@Component({
-  tag: 'shipping-address',
-  styleUrl: 'shipping-address.css',
-  shadow: true,
-})
-export class ShippingAddress {
-  /** JSON string of shipping address */
-  @Prop() shippingAddress: string;
+describe('shipping-address component', () => {
+  it('renders correctly with valid shipping address', async () => {
+    const page = await newSpecPage({
+      components: [ShippingAddress],
+      html: `<shipping-address shipping-address='${validShippingAddress}'></shipping-address>`,
+    });
 
-  /** Flag indicating if billing address is already available */
-  @Prop() hasBillingAddress: boolean = false;
+    expect(page.root).toBeTruthy();
+    expect(page.root.shadowRoot.textContent).toContain('John Doe');
+    expect(page.root.shadowRoot.textContent).toContain('Denver');
+  });
 
-  /** Emits billing address when checkbox is clicked */
-  @Event() billingAddressCopied: EventEmitter<BillingAddressType>;
+  it('does not render with invalid shipping address', async () => {
+    const page = await newSpecPage({
+      components: [ShippingAddress],
+      html: `<shipping-address shipping-address='${invalidShippingAddress}'></shipping-address>`,
+    });
 
-  /**
-   * Converts a shipping address object to billing address format
-   * @param shipping Shipping address object
-   * @returns Billing address object
-   */
-  private convertShippingToBilling(shipping: ShippingAddressType): BillingAddressType {
-    const billing: BillingAddressType = {};
-    for (const key in shipping) {
-      if (shipping.hasOwnProperty(key)) {
-        const billingKey = key.replace(/^shipping/, 'billing') as keyof BillingAddressType;
-        billing[billingKey] = shipping[key];
-      }
-    }
-    return billing;
-  }
+    expect(page.root).toBeNull();
+  });
 
-  /**
-   * Handles checkbox click to emit converted billing address
-   * @param address Parsed shipping address
-   */
-  private onBillingCheckboxClick(address: ShippingAddressType) {
-    const billingAddress = this.convertShippingToBilling(address);
-    this.billingAddressCopied.emit(billingAddress);
-  }
+  it('does not render with invalid JSON string', async () => {
+    const page = await newSpecPage({
+      components: [ShippingAddress],
+      html: `<shipping-address shipping-address='{invalid_json}'></shipping-address>`,
+    });
 
-  /**
-   * Parses and validates the shipping address
-   * @returns Valid shipping address or null
-   */
-  private get parsedShippingAddress(): ShippingAddressType | null {
-    try {
-      const parsed = JSON.parse(this.shippingAddress);
-      const requiredFields = ['shippingAddress1', 'shippingCity', 'shippingState', 'shippingZipcode'];
-      const isValid = requiredFields.every(field => typeof parsed[field] === 'string');
-      return isValid ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
+    expect(page.root).toBeNull();
+  });
 
-  render() {
-    const address = this.parsedShippingAddress;
+  it('emits billingAddressCopied on checkbox click with correct converted billing address', async () => {
+    const page = await newSpecPage({
+      components: [ShippingAddress],
+      html: `<shipping-address shipping-address='${validShippingAddress}'></shipping-address>`,
+    });
 
-    if (!address) return null;
+    const checkbox = page.root.shadowRoot.querySelector('input[type="checkbox"]');
+    const spy = jest.fn();
+    page.root.addEventListener('billingAddressCopied', spy);
 
-    return (
-      <Host>
-        <div class="p-5 bg-gray-50 border border-secondary-stroke rounded-lg dark:bg-gray-800 dark:border-gray-700 my-4">
-          <h2 class="text-gray-900 font-semibold text-md">Shipping Information</h2>
+    checkbox.click();
+    await page.waitForChanges();
 
-          <div>
-            <p class="text-gray-600 text-sm">{address.shippingName}</p>
-            <p class="text-gray-600 text-sm">{address.shippingEmail}</p>
-            <p class="text-gray-600 text-sm">{address.shippingAddress1}</p>
-            <p class="text-gray-600 text-sm">
-              {address.shippingCity}, {address.shippingState} {address.shippingZipcode}
-            </p>
-          </div>
+    expect(spy).toHaveBeenCalled();
+    const eventDetail = spy.mock.calls[0][0].detail;
+    expect(eventDetail.billingName).toBe('John Doe');
+    expect(eventDetail.billingZipcode).toBe('80202');
+  });
 
-          {!this.hasBillingAddress && (
-            <div class="flex items-center my-2">
-              <input
-                id="billing-same-checkbox"
-                type="checkbox"
-                aria-checked="false"
-                onClick={() => this.onBillingCheckboxClick(address)}
-                class="w-4 h-4 text-gray-600 bg-gray-100 border-gray-300 rounded-sm focus:ring-blue-500 focus:ring-2"
-              />
-              <label
-                htmlFor="billing-same-checkbox"
-                class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-              >
-                Billing address is the same as shipping address
-              </label>
-            </div>
-          )}
-        </div>
-      </Host>
-    );
-  }
-}
+  it('does not show checkbox if hasBillingAddress is true', async () => {
+    const page = await newSpecPage({
+      components: [ShippingAddress],
+      html: `<shipping-address shipping-address='${validShippingAddress}' has-billing-address="true"></shipping-address>`,
+    });
+
+    const checkbox = page.root.shadowRoot.querySelector('input[type="checkbox"]');
+    expect(checkbox).toBeNull();
+  });
+
+  it('has accessible label and checkbox attributes', async () => {
+    const page = await newSpecPage({
+      components: [ShippingAddress],
+      html: `<shipping-address shipping-address='${validShippingAddress}'></shipping-address>`,
+    });
+
+    const checkbox = page.root.shadowRoot.querySelector('#billing-same-checkbox');
+    const label = page.root.shadowRoot.querySelector('label');
+
+    expect(checkbox).toBeTruthy();
+    expect(label.getAttribute('for')).toBe('billing-same-checkbox');
+    expect(checkbox.getAttribute('aria-checked')).toBe('false');
+  });
+});
