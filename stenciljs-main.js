@@ -1,117 +1,223 @@
-import { Component, Prop, h, State } from '@stencil/core';
+import {
+  Component,
+  h,
+  Host,
+  Prop,
+  State,
+  Event,
+  EventEmitter,
+} from '@stencil/core';
+import { CONSTANTS } from '../../utils/constant';
 
 @Component({
-  tag: 'billing-form',
-  styleUrl: 'billing-form.css',
-  shadow: false,
+  tag: 'billing-address',
+  styleUrl: 'billing-address.css',
+  shadow: true,
 })
-export class BillingForm {
-  @Prop() inputData: any;
-
-  @State() formData = {
-    name: '',
-    email: '',
-    phone: '',
-    address1: '',
-    city: '',
-    state: '',
-    zipcode: '',
+export class BillingAddress {
+  @Prop() billingAddress: any;
+  @State() billingForm: any = {
+    billingAddress1: '',
+    billingAddress2: '',
+    billingEmail: '',
+    billingPhone: '',
+    billingCity: '',
+    billingState: '',
+    billingZipcode: '',
   };
 
+  @State() isFormEditable: boolean = true;
+  @State() formErrors: Record<string, string> = {};
   @State() isValid = false;
-  @State() isSubmitted = false;
-  @State() isEditing = false;
+  @State() isFormSubmitted: boolean = false;
+
+  /**
+   * Fires when the continue button is clicked
+   */
+  @Event() handleBillingAddressSubmit: EventEmitter<any>;
+
+  private requiredFields = [
+    'billingAddress1',
+    'billingCity',
+    'billingState',
+    'billingZipcode',
+  ];
 
   componentWillLoad() {
-    if (this.inputData?.addresses?.billingAddress) {
-      const billing = this.inputData.addresses.billingAddress;
-      const requiredFields = ['billingName', 'billingEmail', 'billingPhone', 'billingAddress1', 'billingCity', 'billingState', 'billingZipcode'];
-      const isComplete = requiredFields.every(field => billing[field]);
+    if (this.billingAddress) {
+      const billing = JSON.parse(this.billingAddress);
+      const isComplete = this.requiredFields.every((field) => billing[field]);
+
       if (isComplete) {
-        this.formData = {
-          name: billing.billingName,
-          email: billing.billingEmail,
-          phone: billing.billingPhone,
-          address1: billing.billingAddress1,
-          city: billing.billingCity,
-          state: billing.billingState,
-          zipcode: billing.billingZipcode,
-        };
-        this.isSubmitted = true;
+        this.billingForm = billing;
+        this.isFormEditable = false;
       }
     }
   }
 
-  handleInputChange(e, field) {
-    this.formData = { ...this.formData, [field]: e.target.value };
+  private handleChange(field: string, value: string) {
+    this.billingForm = { ...this.billingForm, [field]: value };
     this.validateForm();
+    this.isFormSubmitted = true;
   }
 
-  validateForm() {
-    const { name, email, phone, address1, city, state, zipcode } = this.formData;
-    const isValid = name && email && phone && address1 && city && state && zipcode;
+  private validateForm() {
+    const { billingAddress1, billingCity, billingState, billingZipcode } =
+      this.billingForm;
+    const isValid =
+      billingAddress1 && billingCity && billingState && billingZipcode;
     this.isValid = !!isValid;
   }
 
-  handleContinue = () => {
-    if (!this.isValid) return;
-    this.isSubmitted = true;
-    this.isEditing = false;
-    // Call Phoenix BFF here if needed
-  };
+  private handleContinue() {
+    this.validateForm();
+    if (Object.keys(this.formErrors).length === 0) {
+      this.isFormEditable = false;
+      this.handleBillingAddressSubmit.emit(this.billingForm);
+      // this.sendToAPI(this.billingForm); // Integrate API call here
+    }
+  }
 
-  handleEdit = () => {
-    this.isEditing = true;
-    this.isSubmitted = false;
-  };
+  private handleEdit() {
+    this.isFormEditable = true;
+  }
 
-  renderBillingForm() {
-    const fields = [
-      { label: 'Address', field: 'address1' },
-      { label: 'City', field: 'city' },
-      { label: 'Zip code', field: 'zipcode' },
-      { label: 'Select state', field: 'state' },
-    ];
-
+  private renderInput(
+    label: string,
+    name: keyof typeof this.billingForm,
+    type = 'text'
+  ) {
+    const isFieldEmpty =
+      !this.billingForm[name] &&
+      this.requiredFields.includes(name as string) &&
+      !this.isValid &&
+      this.isFormSubmitted;
     return (
       <div>
-        <input type="text" placeholder="Name" value={this.formData.name} onInput={e => this.handleInputChange(e, 'name')} />
-        <input type="text" placeholder="Email" value={this.formData.email} onInput={e => this.handleInputChange(e, 'email')} />
-        <input type="text" placeholder="Phone" value={this.formData.phone} onInput={e => this.handleInputChange(e, 'phone')} />
-        {fields.map(item => (
-          <input type="text" placeholder={item.label} value={this.formData[item.field]} onInput={e => this.handleInputChange(e, item.field)} />
-        ))}
-        <button disabled={!this.isValid} onClick={this.handleContinue}>Continue</button>
+        <input
+          class={`bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-md focus:ring-blue-500 focus:border-blue-500 block w-full ${
+            isFieldEmpty ? 'border-red-500' : 'mb-5'
+          }`}
+          type={type}
+          placeholder={label}
+          value={this.billingForm[name]}
+          disabled={!this.isFormEditable}
+          onInput={(e: any) => this.handleChange(name as any, e.target.value)}
+        />
+        {isFieldEmpty && (
+          <div class="mb-1">
+            <span class="text-xs text-red-600 font-medium">
+              {label} must be filled out.
+            </span>
+          </div>
+        )}
       </div>
     );
   }
 
-  renderReadOnly() {
-    const { name, email, phone, address1, city, state, zipcode } = this.formData;
+  private isValidBillingAddress(obj: any) {
     return (
-      <div>
-        <p>{name}</p>
-        <p>{email}</p>
-        <p>{phone}</p>
-        <p>{address1}, {city}, {state} - {zipcode}</p>
-        <button onClick={this.handleEdit}>Edit</button>
-      </div>
+      obj &&
+      typeof obj?.billingAddress1 === 'string' &&
+      typeof obj?.billingCity === 'string' &&
+      typeof obj?.billingState === 'string' &&
+      typeof obj?.billingZipcode === 'string'
     );
   }
 
   render() {
-    return (
-      <div>
-        <h3>Billing address</h3>
-        {!this.isSubmitted || this.isEditing ? this.renderBillingForm() : this.renderReadOnly()}
+    const isPassedAddressIsValid =
+      this.billingAddress &&
+      JSON.parse(this.billingAddress) &&
+      this.isValidBillingAddress(JSON.parse(this.billingAddress));
+    const isSubmittedAddressValid =
+      this.billingForm &&
+      this.isValidBillingAddress(this.billingForm) &&
+      !this.isFormEditable;
 
-        {this.isSubmitted && !this.isEditing && (
-          <div class="payment-methods">
-            <h4>Payment methods</h4>
-            <label><input type="radio" name="payment" /> Credit or debit card</label>
-            <label><input type="radio" name="payment" /> ACH</label>
+    if (isPassedAddressIsValid || isSubmittedAddressValid) {
+      return (
+        <Host>
+          <div class="p-5 bg-gray-50 border border-secondary-stroke rounded-lg my-4">
+            <h2 class="text-gray-900 font-semibold text-md">
+              Billing information{' '}
+              <span>
+                <common-icon name="edit"></common-icon>
+              </span>
+            </h2>
+            <div>
+              <h5 class="text-gray-600 text-sm">
+                {this.billingForm.billingName}
+              </h5>
+              <h5 class="text-gray-600 text-sm">
+                {this.billingForm.billingEmail}
+              </h5>
+              <h5 class="text-gray-600 text-sm">
+                {this.billingForm.billingAddress1}{' '}
+                {this.billingForm.billingAddress2}
+              </h5>
+              <h5 class="text-gray-600 text-sm">
+                {this.billingForm.billingState
+                  ? this.billingForm.billingCity + ', '
+                  : this.billingForm.billingCity}
+                {this.billingForm.billingState}{' '}
+                {this.billingForm.billingZipcode}
+              </h5>
+            </div>
+            {!isPassedAddressIsValid && (
+              <common-button
+                variant="secondary"
+                size="small"
+                classNames="mt-4 w-full"
+                onClick={() => this.handleEdit()}
+              >
+                Edit
+              </common-button>
+            )}
           </div>
-        )}
+        </Host>
+      );
+    }
+
+    return (
+      <div class="my-4">
+        <h2 class="text-gray-900 font-semibold text-md pb-4">
+          Billing information
+        </h2>{' '}
+        <label class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
+          Address
+        </label>
+        <div class="grid">
+          {this.renderInput('Address', 'billingAddress1')}
+          {this.renderInput('Apt, Suite (Optional)', 'billingAddress2')}
+          <div class="grid gap-6 grid-cols-2">
+            {this.renderInput('City', 'billingCity')}
+            {this.renderInput('Zip code', 'billingZipcode')}
+          </div>
+          <select
+            id="countries"
+            class="mb-4 bg-gray-50 border border-gray-300 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+            onInput={(e: any) =>
+              this.handleChange('billingState' as any, e.target.value)
+            }
+          >
+            <option value="">Choose a state</option>
+            {CONSTANTS.states.map((state) => (
+              <option
+                value={state}
+                selected={state === this.billingForm.billingState}
+              >
+                {state}
+              </option>
+            ))}
+          </select>
+          <common-button
+            disabled={!this.isValid || !this.isFormSubmitted}
+            onClick={() => this.handleContinue()}
+          >
+            Continue
+          </common-button>
+        </div>
       </div>
     );
   }
